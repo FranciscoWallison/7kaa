@@ -1,0 +1,88 @@
+# Mantem o branch master de FranciscoWallison/7kaa sincronizado com o repositorio
+# canonico do 7KAA, que fica no GIT DO SOURCEFORGE (projeto 7kfans), nao no GitHub.
+#
+# Por que o SourceForge e nao o GitHub:
+#   O espelho github.com/the3dfxdude/7kaa esta ARQUIVADO/read-only desde 25/09/2023 e
+#   parou na v2.15.6. Em 25/08/2026 estava 217 commits atras. Quem anda e o
+#   git.code.sf.net/p/skfans/7kaa, ja na v2.15.7. Por isso este repo nao e um "fork"
+#   do GitHub: e um espelho novo, empurrado a partir do SourceForge.
+#
+# Por que rebase e nao fast-forward:
+#   O arquivo deste workflow vive no master, entao o master fica sempre 1 commit "a
+#   frente" do upstream. Um fast-forward quebraria assim que o upstream avancasse.
+#   Aqui a gente RECOLOCA (rebase) o commit deste workflow em cima do upstream atual e
+#   da push. O master fica sempre = upstream atual + 1 commit (este workflow).
+#
+# ATENCAO, a armadilha que ja mordeu no fork do Warzone 2100:
+#   O GitHub registra os workflows (e o cron do schedule) A PARTIR DO DEFAULT BRANCH.
+#   Hoje o default aqui e o master, que e onde este arquivo esta - ok. Se um dia voce
+#   trocar o default para um branch de trabalho, LEVE ESTE ARQUIVO JUNTO, senao o
+#   GitHub marca o workflow como "deleted" e o sync morre em silencio.
+#   Conferir: curl -s https://api.github.com/repos/FranciscoWallison/7kaa/actions/workflows/upstream-sync.yml
+#   O campo "state" tem que ser "active".
+
+name: Upstream Sync
+
+on:
+  schedule:
+    - cron: '30 6 * * *'     # todo dia as 06:30 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do master (historico completo p/ achar a base do rebase)
+        uses: actions/checkout@v5
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Rebase do commit deste workflow sobre o upstream + push
+        run: |
+          set -euo pipefail
+          git config user.name  "Francisco Wallison"
+          git config user.email "franciscowallison@gmail.com"
+
+          # o git do SourceForge nao usa o nome 'master' por acaso: e o unico branch la
+          git remote add upstream https://git.code.sf.net/p/skfans/7kaa
+          git fetch --tags upstream master
+
+          UP=$(git rev-parse upstream/master)
+          BASE=$(git merge-base "$UP" HEAD)
+          OWN=$(git rev-list --count "$BASE"..HEAD)
+          BEHIND=$(git rev-list --count HEAD.."$UP")
+          echo "upstream=${UP:0:9} base=${BASE:0:9} proprios=$OWN atras=$BEHIND"
+
+          if [ "$BASE" = "$UP" ]; then
+            {
+              echo "### Ja estava em dia"
+              echo "Upstream em \`${UP:0:9}\`. Nada a fazer."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # reaplica os commits locais (este workflow) em cima do upstream atual
+          git rebase "$UP"
+          git push --force-with-lease origin master
+          # tags novas do upstream (releases do 7kfans) tambem vao para o espelho
+          git push --tags origin || true
+
+          NEW=$(git rev-parse --short HEAD)
+          {
+            echo "### master sincronizado"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| upstream (SourceForge) | \`${UP:0:9}\` |"
+            echo "| upstream tinha andado | $BEHIND commit(s) |"
+            echo "| novo tip do espelho | \`$NEW\` |"
+            echo "| commits proprios reaplicados | $OWN |"
+          } >> "$GITHUB_STEP_SUMMARY"
