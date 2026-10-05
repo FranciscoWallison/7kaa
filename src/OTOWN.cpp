@@ -1221,6 +1221,10 @@ void Town::update_target_loyalty()
 	int 	  i, targetLoyalty;
 	int 	  nationRaceId = nationPtr->race_id;
 
+	int qolContribution = config_adv.town_loyalty_qol ?
+		(quality_of_life-50)/3 :			// -17 to +17
+		0;						// off
+
 	for( i=0 ; i<MAX_RACE ; i++ )
 	{
 		if( race_pop_array[i] == 0 )
@@ -1230,6 +1234,13 @@ void Town::update_target_loyalty()
 
 		targetLoyalty = race_harmony(i+1)/3 +				// 0 to 33
 							 (int)nationPtr->reputation/4;	// -25 to +25
+
+		//------- apply quality of life -------//
+
+		if( targetLoyalty >= 30 )	// apply net effect as long as targetLoyalty is above 30
+			targetLoyalty = MAX(30, targetLoyalty + qolContribution);
+		else if( qolContribution > 0 )	// only boost when targetLoyalty is lower than 30
+			targetLoyalty += qolContribution;
 
 		//---- employment help increase loyalty ----//
 
@@ -1313,26 +1324,6 @@ void Town::update_target_loyalty()
 				targetLoyalty = race_target_loyalty_array[j] - thisInfluence;
 				race_target_loyalty_array[j] = MAX(0, targetLoyalty);
 			}
-		}
-	}
-
-	//------- apply quality of life -------//
-
-	int qolContribution = config_adv.town_loyalty_qol ?
-		(quality_of_life-50)/3 :			// -17 to +17
-		0;						// off
-	for( i=0 ; i<MAX_RACE ; i++ )
-	{
-		if( race_pop_array[i] == 0 )
-			continue;
-
-		targetLoyalty = race_target_loyalty_array[i];
-
-		// Quality of life only applies to the part above 30 loyalty
-		if (targetLoyalty > 30)
-		{
-			targetLoyalty = MAX(30, targetLoyalty + qolContribution);
-			race_target_loyalty_array[i] = MIN(100, targetLoyalty);
 		}
 	}
 
