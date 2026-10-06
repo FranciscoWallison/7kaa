@@ -1268,6 +1268,7 @@ void Town::update_target_loyalty()
 	Firm*   firmPtr;
 	Nation  *baseNationPtr;
 	Unit*   unitPtr;
+	int	campContribution[MAX_RACE] = {0};
 
 	for( i=0 ; i<linked_firm_count ; i++ )
 	{
@@ -1316,15 +1317,31 @@ void Town::update_target_loyalty()
 
 			if( firmPtr->nation_recno == nation_recno )	// if the command base belongs to the same nation
 			{
-				targetLoyalty = race_target_loyalty_array[j] + thisInfluence;
-				race_target_loyalty_array[j] = MIN(100, targetLoyalty);
+				campContribution[j] += thisInfluence;
 			}
 			else if( unitPtr->race_id == j+1 )		// for enemy camps, only decrease same race peasants
 			{
-				targetLoyalty = race_target_loyalty_array[j] - thisInfluence;
-				race_target_loyalty_array[j] = MAX(0, targetLoyalty);
+				campContribution[j] -= thisInfluence;
 			}
 		}
+	}
+
+	// apply the net camp contribution
+	for( i=0 ; i<MAX_RACE ; i++ )
+	{
+		if( race_pop_array[i] == 0 )
+			continue;
+
+		int targetLoyalty = race_target_loyalty_array[i] + campContribution[i];
+
+		if( targetLoyalty < 0 )
+			race_target_loyalty_array[i] = 0;
+
+		else if( targetLoyalty > 100 )
+			race_target_loyalty_array[i] = 100;
+
+		else
+			race_target_loyalty_array[i] = targetLoyalty;
 	}
 
 	//------- update link status to linked enemy camps -------//
